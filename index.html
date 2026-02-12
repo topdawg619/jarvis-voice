@@ -129,6 +129,7 @@ body{background:var(--bg);color:var(--blue);font-family:'Courier New',monospace;
 
   <div class="controls">
     <button id="always-listen-btn" title="Always Listen">AUTO</button>
+    <input id="text-input" type="text" placeholder="Type here..." style="background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.3);color:var(--blue);font-family:'Courier New',monospace;font-size:14px;padding:8px 12px;border-radius:20px;outline:none;width:200px;margin-left:10px" />
     <button id="ptt-btn" title="Push to Talk (or hold Space)">
       <svg class="mic-icon" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
     </button>
@@ -322,8 +323,13 @@ function initSpeechRecognition(){
     }
   };
   S.recognition.onerror=e=>{
+    console.log('Speech error:',e.error);
     if(e.error!=='no-speech'&&e.error!=='aborted')setStatus('MIC ERROR: '+e.error);
   };
+  S.recognition.onstart=()=>console.log('Recognition started');
+  S.recognition.onaudiostart=()=>console.log('Audio capture started');
+  S.recognition.onspeechstart=()=>console.log('Speech detected');
+  S.recognition.onspeechend=()=>console.log('Speech ended');
 }
 
 function startListening(){
@@ -374,6 +380,14 @@ document.addEventListener('keydown',e=>{
 document.addEventListener('keyup',e=>{
   if(e.code==='Space'&&!$('settings-panel').classList.contains('open')&&document.activeElement.tagName!=='INPUT'){
     e.preventDefault();if(!S.alwaysListen)stopListening();
+  }
+});
+
+// Text input fallback
+$('text-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&e.target.value.trim()){
+    sendToAI(e.target.value.trim());
+    e.target.value='';
   }
 });
 
