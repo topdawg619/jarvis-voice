@@ -176,7 +176,7 @@ body{background:var(--bg);color:var(--blue);font-family:'Courier New',monospace;
 // ─── State ───
 const S = {
   apiKey: localStorage.getItem('jarvis_api_key') || '',
-  voice: localStorage.getItem('jarvis_voice') || 'onyx',
+  voice: localStorage.getItem('jarvis_voice') || 'echo',
   model: localStorage.getItem('jarvis_model') || 'gpt-4o',
   messages: [{role:'system',content:'You are Jarvis, an advanced AI assistant. You are intelligent, witty, slightly sardonic, and deeply competent. Respond conversationally and concisely — you\'re speaking out loud, not writing essays. Keep responses under 3 sentences unless asked for detail.'}],
   isSpeaking: false,
@@ -440,7 +440,7 @@ async function speakText(text){
     const res=await fetch('https://api.openai.com/v1/audio/speech',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+S.apiKey},
-      body:JSON.stringify({model:'tts-1',input:text,voice:S.voice,response_format:'mp3'})
+      body:JSON.stringify({model:'tts-1-hd',input:text,voice:S.voice,response_format:'mp3'})
     });
     if(!res.ok){const err=await res.text();console.error('TTS API error:',res.status,err);throw new Error('TTS '+res.status);}
     const blob=await res.blob();
