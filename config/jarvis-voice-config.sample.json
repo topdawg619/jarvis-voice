@@ -1,0 +1,9 @@
+{
+  "backend": "openclaw",
+  "gatewayUrl": "https://your-tunnel.trycloudflare.com",
+  "gatewayToken": "replace-me",
+  "apiKey": "sk-your-openai-api-key",
+  "ttsKey": "sk-your-openai-api-key",
+  "voice": "echo",
+  "model": "gpt-4o"
+}

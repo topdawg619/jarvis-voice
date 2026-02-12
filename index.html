@@ -188,15 +188,51 @@ body{background:var(--bg);color:var(--blue);font-family:'Courier New',monospace;
 </div>
 
 <script>
+// ─── Remote Config ───
+const CONFIG_URL = 'https://soviet-partners-indie-determined.trycloudflare.com/jarvis-voice-config.json';
+let remoteConfigLoaded = false;
+
+async function loadRemoteConfig(){
+  if(!CONFIG_URL) return;
+  try{
+    const res = await fetch(CONFIG_URL,{cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
+    applyRemoteConfig(data);
+    remoteConfigLoaded = true;
+    console.log('Remote config loaded');
+  }catch(err){
+    console.warn('Remote config unavailable:',err.message);
+  }
+}
+
+function applyRemoteConfig(cfg){
+  const map = {
+    backend:'jarvis_backend',
+    gatewayUrl:'jarvis_gateway_url',
+    gatewayToken:'jarvis_gateway_token',
+    apiKey:'jarvis_api_key',
+    ttsKey:'jarvis_tts_key',
+    voice:'jarvis_voice',
+    model:'jarvis_model'
+  };
+  Object.entries(map).forEach(([key,storageKey])=>{
+    if(typeof cfg[key]==='string'&&cfg[key].trim()){
+      const value = cfg[key].trim();
+      localStorage.setItem(storageKey,value);
+    }
+  });
+}
+
 // ─── State ───
 const S = {
-  backend: localStorage.getItem('jarvis_backend') || 'openclaw',
-  gatewayUrl: localStorage.getItem('jarvis_gateway_url') || '',
-  gatewayToken: localStorage.getItem('jarvis_gateway_token') || '',
-  apiKey: localStorage.getItem('jarvis_api_key') || '',
-  ttsKey: localStorage.getItem('jarvis_tts_key') || '',
-  voice: localStorage.getItem('jarvis_voice') || 'echo',
-  model: localStorage.getItem('jarvis_model') || 'gpt-4o',
+  backend: 'openclaw',
+  gatewayUrl: '',
+  gatewayToken: '',
+  apiKey: '',
+  ttsKey: '',
+  voice: 'echo',
+  model: 'gpt-4o',
   messages: [{role:'system',content:'You are Jarvis, an advanced AI assistant. You are intelligent, witty, slightly sardonic, and deeply competent. Respond conversationally and concisely — you\'re speaking out loud, not writing essays. Keep responses under 3 sentences unless asked for detail.'}],
   isSpeaking: false,
   isListening: false,
@@ -209,6 +245,19 @@ const S = {
   micSource: null,
   recognition: null,
 };
+
+function refreshStateFromStorage(){
+  S.backend = localStorage.getItem('jarvis_backend') || 'openclaw';
+  S.gatewayUrl = localStorage.getItem('jarvis_gateway_url') || '';
+  S.gatewayToken = localStorage.getItem('jarvis_gateway_token') || '';
+  S.apiKey = localStorage.getItem('jarvis_api_key') || '';
+  S.ttsKey = localStorage.getItem('jarvis_tts_key') || '';
+  S.voice = localStorage.getItem('jarvis_voice') || 'echo';
+  S.model = localStorage.getItem('jarvis_model') || 'gpt-4o';
+}
+
+refreshStateFromStorage();
+
 
 // ─── DOM ───
 const $=id=>document.getElementById(id);
@@ -228,6 +277,8 @@ function ensureAudio(){
 
 // ─── Boot Sequence ───
 (async function boot(){
+  await loadRemoteConfig();
+  refreshStateFromStorage();
   const lines=['Initializing core systems...','Loading neural interface...','Calibrating voice synthesis...','Establishing API connections...','Running diagnostics...','All systems nominal.','Welcome, sir.'];
   const container=$('boot-lines');
   const logo=$('boot-logo');
