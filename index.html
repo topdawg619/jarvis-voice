@@ -148,22 +148,37 @@ body{background:var(--bg);color:var(--blue);font-family:'Courier New',monospace;
 <div id="settings-panel">
   <div class="settings-box">
     <h2>CONFIGURATION</h2>
-    <label>OPENAI API KEY</label>
-    <input type="password" id="api-key-input" placeholder="sk-...">
+    <label>BACKEND</label>
+    <select id="backend-select">
+      <option value="openclaw">JARVIS (OpenClaw)</option>
+      <option value="openai">OpenAI Direct</option>
+    </select>
+    <div id="openclaw-settings">
+      <label>OPENCLAW GATEWAY URL</label>
+      <input type="text" id="gateway-url-input" placeholder="https://your-tunnel.loca.lt">
+      <label>GATEWAY TOKEN</label>
+      <input type="password" id="gateway-token-input" placeholder="Gateway auth token">
+    </div>
+    <div id="openai-settings" style="display:none">
+      <label>OPENAI API KEY</label>
+      <input type="password" id="api-key-input" placeholder="sk-...">
+      <label>CHAT MODEL</label>
+      <select id="model-select">
+        <option value="gpt-4o">GPT-4o</option>
+        <option value="gpt-4o-mini">GPT-4o Mini</option>
+        <option value="gpt-4-turbo">GPT-4 Turbo</option>
+      </select>
+    </div>
+    <label>OPENAI API KEY (for TTS)</label>
+    <input type="password" id="tts-key-input" placeholder="sk-... (needed for voice output)">
     <label>TTS VOICE</label>
     <select id="voice-select">
+      <option value="echo">Echo (Jarvis)</option>
       <option value="onyx">Onyx (Deep)</option>
       <option value="alloy">Alloy</option>
-      <option value="echo">Echo</option>
       <option value="fable">Fable</option>
       <option value="nova">Nova</option>
       <option value="shimmer">Shimmer</option>
-    </select>
-    <label>CHAT MODEL</label>
-    <select id="model-select">
-      <option value="gpt-4o">GPT-4o</option>
-      <option value="gpt-4o-mini">GPT-4o Mini</option>
-      <option value="gpt-4-turbo">GPT-4 Turbo</option>
     </select>
     <div class="btn-row">
       <button onclick="saveSettings()">SAVE</button>
@@ -175,7 +190,11 @@ body{background:var(--bg);color:var(--blue);font-family:'Courier New',monospace;
 <script>
 // ─── State ───
 const S = {
+  backend: localStorage.getItem('jarvis_backend') || 'openclaw',
+  gatewayUrl: localStorage.getItem('jarvis_gateway_url') || '',
+  gatewayToken: localStorage.getItem('jarvis_gateway_token') || '',
   apiKey: localStorage.getItem('jarvis_api_key') || '',
+  ttsKey: localStorage.getItem('jarvis_tts_key') || '',
   voice: localStorage.getItem('jarvis_voice') || 'echo',
   model: localStorage.getItem('jarvis_model') || 'gpt-4o',
   messages: [{role:'system',content:'You are Jarvis, an advanced AI assistant. You are intelligent, witty, slightly sardonic, and deeply competent. Respond conversationally and concisely — you\'re speaking out loud, not writing essays. Keep responses under 3 sentences unless asked for detail.'}],
@@ -236,7 +255,8 @@ function ensureAudio(){
   initSpeechRecognition();
   playTone(880,.08,.1);
   setTimeout(()=>playTone(1100,.08,.1),120);
-  if(!S.apiKey)setTimeout(()=>openSettings(),1000);
+  if(S.backend==='openclaw'&&!S.gatewayUrl)setTimeout(()=>openSettings(),1000);
+  else if(S.backend==='openai'&&!S.apiKey)setTimeout(()=>openSettings(),1000);
 })();
 
 function delay(ms){return new Promise(r=>setTimeout(r,ms))}
@@ -253,18 +273,37 @@ function playTone(freq,dur,vol=.05){
 }
 
 // ─── Settings ───
+function toggleBackendUI(){
+  const isOC=$('backend-select').value==='openclaw';
+  $('openclaw-settings').style.display=isOC?'block':'none';
+  $('openai-settings').style.display=isOC?'none':'block';
+}
 function openSettings(){
+  $('backend-select').value=S.backend;
+  $('gateway-url-input').value=S.gatewayUrl;
+  $('gateway-token-input').value=S.gatewayToken;
   $('api-key-input').value=S.apiKey;
+  $('tts-key-input').value=S.ttsKey;
   $('voice-select').value=S.voice;
   $('model-select').value=S.model;
+  toggleBackendUI();
+  $('backend-select').onchange=toggleBackendUI;
   $('settings-panel').classList.add('open');
 }
 function closeSettings(){$('settings-panel').classList.remove('open')}
 function saveSettings(){
+  S.backend=$('backend-select').value;
+  S.gatewayUrl=$('gateway-url-input').value.trim().replace(/\/$/,'');
+  S.gatewayToken=$('gateway-token-input').value.trim();
   S.apiKey=$('api-key-input').value.trim();
+  S.ttsKey=$('tts-key-input').value.trim();
   S.voice=$('voice-select').value;
   S.model=$('model-select').value;
+  localStorage.setItem('jarvis_backend',S.backend);
+  localStorage.setItem('jarvis_gateway_url',S.gatewayUrl);
+  localStorage.setItem('jarvis_gateway_token',S.gatewayToken);
   localStorage.setItem('jarvis_api_key',S.apiKey);
+  localStorage.setItem('jarvis_tts_key',S.ttsKey);
   localStorage.setItem('jarvis_voice',S.voice);
   localStorage.setItem('jarvis_model',S.model);
   closeSettings();
@@ -401,7 +440,8 @@ alBtn.onclick=()=>{
 
 // ─── AI Chat ───
 async function sendToAI(text){
-  if(!S.apiKey){openSettings();setStatus('API KEY REQUIRED');return;}
+  if(S.backend==='openclaw'&&!S.gatewayUrl){openSettings();setStatus('GATEWAY URL REQUIRED');return;}
+  if(S.backend==='openai'&&!S.apiKey){openSettings();setStatus('API KEY REQUIRED');return;}
   S.isThinking=true;
   setStatus('THINKING...');
   currentEl.innerHTML='<span class="thinking-dots"><span>●</span><span>●</span><span>●</span></span>';
@@ -409,11 +449,17 @@ async function sendToAI(text){
   S.messages.push({role:'user',content:text});
   addConvoMessage('user',text);
   try{
-    const res=await fetch('https://api.openai.com/v1/chat/completions',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+S.apiKey},
-      body:JSON.stringify({model:S.model,messages:S.messages,max_tokens:300})
-    });
+    let url,headers,body;
+    if(S.backend==='openclaw'){
+      url=S.gatewayUrl+'/v1/chat/completions';
+      headers={'Content-Type':'application/json','Authorization':'Bearer '+S.gatewayToken};
+      body=JSON.stringify({model:'openclaw:main',messages:S.messages,max_tokens:300,user:'jarvis-voice-ui'});
+    }else{
+      url='https://api.openai.com/v1/chat/completions';
+      headers={'Content-Type':'application/json','Authorization':'Bearer '+S.apiKey};
+      body=JSON.stringify({model:S.model,messages:S.messages,max_tokens:300});
+    }
+    const res=await fetch(url,{method:'POST',headers,body});
     if(!res.ok)throw new Error('API '+res.status);
     const data=await res.json();
     const reply=data.choices[0].message.content;
@@ -432,14 +478,15 @@ async function sendToAI(text){
 
 // ─── TTS ───
 async function speakText(text){
-  if(!S.apiKey){console.log('TTS skipped: no API key');return;}
+  const ttsApiKey=S.ttsKey||S.apiKey;
+  if(!ttsApiKey){console.log('TTS skipped: no API key');return;}
   S.isSpeaking=true;
   setStatus('SPEAKING...');
   console.log('TTS: requesting speech for',text.substring(0,50)+'...');
   try{
     const res=await fetch('https://api.openai.com/v1/audio/speech',{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+S.apiKey},
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+ttsApiKey},
       body:JSON.stringify({model:'tts-1-hd',input:text,voice:S.voice,response_format:'mp3'})
     });
     if(!res.ok){const err=await res.text();console.error('TTS API error:',res.status,err);throw new Error('TTS '+res.status);}
