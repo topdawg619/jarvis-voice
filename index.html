@@ -432,36 +432,45 @@ async function sendToAI(text){
 
 // ─── TTS ───
 async function speakText(text){
-  if(!S.apiKey)return;
+  if(!S.apiKey){console.log('TTS skipped: no API key');return;}
   S.isSpeaking=true;
   setStatus('SPEAKING...');
+  console.log('TTS: requesting speech for',text.substring(0,50)+'...');
   try{
     const res=await fetch('https://api.openai.com/v1/audio/speech',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+S.apiKey},
       body:JSON.stringify({model:'tts-1',input:text,voice:S.voice,response_format:'mp3'})
     });
-    if(!res.ok)throw new Error('TTS '+res.status);
+    if(!res.ok){const err=await res.text();console.error('TTS API error:',res.status,err);throw new Error('TTS '+res.status);}
     const blob=await res.blob();
+    console.log('TTS: got audio blob',blob.size,'bytes');
     const url=URL.createObjectURL(blob);
     const audio=new Audio(url);
+    // Connect to analyser for visualizer reactivity
     ensureAudio();
-    const source=S.audioCtx.createMediaElementSource(audio);
-    S.analyser=S.audioCtx.createAnalyser();
-    S.analyser.fftSize=256;
-    source.connect(S.analyser);
-    S.analyser.connect(S.audioCtx.destination);
+    if(S.audioCtx.state==='suspended')await S.audioCtx.resume();
+    try{
+      const source=S.audioCtx.createMediaElementSource(audio);
+      S.analyser=S.audioCtx.createAnalyser();
+      S.analyser.fftSize=256;
+      source.connect(S.analyser);
+      S.analyser.connect(S.audioCtx.destination);
+    }catch(e){
+      console.warn('Visualizer connect failed, playing directly:',e.message);
+    }
     await new Promise((resolve,reject)=>{
-      audio.onended=resolve;
-      audio.onerror=reject;
-      audio.play().catch(reject);
+      audio.onended=()=>{console.log('TTS: playback ended');resolve();};
+      audio.onerror=e=>{console.error('TTS: audio error',e);reject(e);};
+      audio.play().then(()=>console.log('TTS: playing')).catch(e=>{console.error('TTS: play() failed',e);reject(e);});
     });
     URL.revokeObjectURL(url);
   }catch(e){
-    console.error('TTS error',e);
+    console.error('TTS error:',e);
+    setStatus('TTS ERROR: '+e.message);
   }
   S.isSpeaking=false;
-  S.analyser=S.audioCtx.createAnalyser();S.analyser.fftSize=256;
+  try{S.analyser=S.audioCtx.createAnalyser();S.analyser.fftSize=256;}catch(e){}
   setStatus('SYSTEMS ONLINE');
   if(S.alwaysListen)setTimeout(()=>startListening(),500);
 }
